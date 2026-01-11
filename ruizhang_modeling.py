@@ -8,6 +8,17 @@ Purpose: Master's Thesis / Term Paper Analysis
 Run: python modeling_professional.py
 """
 
+# Ensure relative paths work no matter where the user runs the script from
+import os as __os
+import pathlib as __pathlib
+__SCRIPT_DIR = __pathlib.Path(__file__).resolve().parent
+try:
+    __os.chdir(__SCRIPT_DIR)
+except Exception:
+    pass
+
+
+
 import os
 import json
 from pathlib import Path
@@ -41,8 +52,31 @@ def _find_data_file(filename: str) -> Path:
 
 import numpy as np
 import pandas as pd
+
+# =========================
+# TEACHER-FRIENDLY DISPLAY OPTIONS
+# =========================
+# By default, the script SAVES all figures to the output folder.
+# If you want pop-up windows for each figure, set environment variable:
+#   SHOW_FIGURES=1
+# Example (macOS/Linux):
+#   SHOW_FIGURES=1 /usr/local/bin/python3 ruizhang_modeling_teacher_run_v2.py
+import os as _os
+SHOW_FIGURES = str(_os.getenv("SHOW_FIGURES", "0")).strip() in ("1","true","True","yes","Y")
+
+def safe_close(fig=None):
+    """Close figures only when we are NOT displaying them."""
+    import matplotlib.pyplot as _plt
+    if SHOW_FIGURES:
+        return
+    try:
+        _plt.close(fig)
+    except Exception:
+        pass
+
 import matplotlib
-matplotlib.use('Agg')
+if not SHOW_FIGURES:
+    matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import seaborn as sns
@@ -864,7 +898,7 @@ def create_leaderboard_journal(data, output_path, title_suffix="Out-of-Sample RM
     
     plt.tight_layout()
     plt.savefig(output_path, dpi=VISUAL_CONFIG['dpi'], bbox_inches='tight')
-    plt.close(fig)
+    safe_close(fig)
     print(f"  ✓ Saved: {output_path.name}")
 
 
@@ -907,7 +941,7 @@ def create_temporal_evolution_journal(yearly_data, segments, output_path):
     
     plt.tight_layout()
     plt.savefig(output_path, dpi=VISUAL_CONFIG['dpi'], bbox_inches='tight')
-    plt.close(fig)
+    safe_close(fig)
     print(f"  ✓ Saved: {output_path.name}")
 
 
@@ -958,7 +992,7 @@ def create_period_comparison_journal(data, output_path):
     
     plt.tight_layout()
     plt.savefig(output_path, dpi=VISUAL_CONFIG['dpi'], bbox_inches='tight')
-    plt.close(fig)
+    safe_close(fig)
     print(f"  ✓ Saved: {output_path.name}")
 
 
@@ -1035,7 +1069,7 @@ def create_debt_comparison_journal(data, output_path):
     
     plt.tight_layout()
     plt.savefig(output_path, dpi=VISUAL_CONFIG['dpi'], bbox_inches='tight')
-    plt.close(fig)
+    safe_close(fig)
     print(f"  ✓ Saved: {output_path.name}")
 
 
@@ -1090,7 +1124,7 @@ def create_heatmap_journal(data, output_path):
     
     plt.tight_layout()
     plt.savefig(output_path, dpi=VISUAL_CONFIG['dpi'], bbox_inches='tight')
-    plt.close(fig)
+    safe_close(fig)
     print(f"  ✓ Saved: {output_path.name}")
 
 
@@ -1219,7 +1253,7 @@ def create_signed_error_boxplot_journal(results_df, output_path):
     
     plt.tight_layout(rect=[0, 0.06, 1, 1])
     plt.savefig(output_path, dpi=VISUAL_CONFIG['dpi'], bbox_inches='tight')
-    plt.close(fig)
+    safe_close(fig)
     print(f"  ✓ Saved: {output_path.name}")
 
 def create_debt_threshold_sensitivity_journal(results_df, outpath):
@@ -1273,7 +1307,7 @@ def create_debt_threshold_sensitivity_journal(results_df, outpath):
 
     fig.tight_layout()
     fig.savefig(outpath, dpi=300, bbox_inches="tight")
-    plt.close(fig)
+    safe_close(fig)
 
 def create_signed_error_boxplot_journal(results_df, output_path):
     """
@@ -1399,7 +1433,7 @@ def create_signed_error_boxplot_journal(results_df, output_path):
     
     plt.tight_layout(rect=[0, 0.06, 1, 1])
     plt.savefig(output_path, dpi=VISUAL_CONFIG['dpi'], bbox_inches='tight')
-    plt.close(fig)
+    safe_close(fig)
     print(f"  ✓ Saved: {output_path.name}")
 
 
@@ -1602,7 +1636,7 @@ def train_final_model_with_shap(df, best_spec, output_dir):
     plt.tight_layout()
     plt.savefig(output_dir / 'feature_importance_comparison.png',
                 dpi=300, bbox_inches='tight', facecolor='white')
-    plt.close()
+    safe_close()
     print("  ✓ Saved: feature_importance_comparison.png")
 
     importance_df.to_csv(output_dir / 'feature_importance.csv', index=False)
@@ -1705,7 +1739,7 @@ def residual_diagnostics(model, X, y, output_dir):
 
     plt.savefig(output_dir / 'residual_diagnostics.png',
                 dpi=300, bbox_inches='tight', facecolor='white')
-    plt.close()
+    safe_close()
     print("  ✓ Saved: residual_diagnostics.png")
 
 # ==================== SECTION 9: EXECUTIVE SUMMARY ====================
@@ -1857,6 +1891,10 @@ if __name__ == "__main__":
 
 
 # ==================== OVERRIDES: PUBLICATION-READY COLORS & TRANSPARENCY ====================
+
+    if SHOW_FIGURES:
+        import matplotlib.pyplot as plt
+        plt.show()
 import matplotlib.pyplot as plt
 import seaborn as sns
 
@@ -1907,7 +1945,7 @@ def create_period_comparison_journal(data, output_path):
 
     plt.tight_layout()
     plt.savefig(output_path, bbox_inches='tight')
-    plt.close()
+    safe_close()
 
 def create_debt_comparison_journal(df, output_path):
     print('[VISUAL OVERRIDE] Figure 5 function called ->', output_path)
@@ -1928,4 +1966,4 @@ def create_debt_comparison_journal(df, output_path):
 
     plt.tight_layout()
     plt.savefig(output_path, bbox_inches='tight')
-    plt.close()
+    safe_close()
