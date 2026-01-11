@@ -1,0 +1,11 @@
+.DS_Store
+__pycache__/
+*.pyc
+
+# results / outputs
+report_results/
+final_submission_results/
+
+# data files (keep repo light)
+*.csv
+*.xlsx

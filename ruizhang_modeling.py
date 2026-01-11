@@ -1128,98 +1128,183 @@ def create_heatmap_journal(data, output_path):
 
 def create_signed_error_boxplot_journal(results_df, output_path):
     """
-    Journal-standard boxplot showing signed forecast errors during COVID-19.
-    Compares High Debt vs Low Debt countries (2020-2021). 
+    Journal-standard boxplot showing *signed* forecast errors during COVID-19 (2020–2021),
+    comparing High Debt vs Low Debt countries.
+
+    Signed error convention: e = y_pred - y_true
+      - e > 0 : over-prediction (Forecast > Actual)
+      - e < 0 : under-prediction (Forecast < Actual)
+
+    Notes on inputs:
+      - If your stored residual is (y_true - y_pred), we flip the sign internally.
+      - Requires columns: segment == 'covid', DebtGroup in {'HighDebt','LowDebt'},
+        and an error column in {'resid','error'} (or y_true & y_pred).
     """
     set_journal_style()
-    
+
     # Filter COVID period data
-    covid_data = results_df[results_df['segment'] == 'covid'].copy()
-    
-    # Remove unknown debt groups
+    covid_data = results_df[results_df.get('segment') == 'covid'].copy()
+
+    # Ensure DebtGroup column exists
+    if 'DebtGroup' not in covid_data.columns:
+        print("  ! 'DebtGroup' column not found in results_df")
+        return
+
+    # Keep only known debt groups
     covid_data = covid_data[covid_data['DebtGroup'].isin(['HighDebt', 'LowDebt'])]
-    
+
     if len(covid_data) == 0:
         print("  ! No COVID data available for signed error plot")
         return
-    
+
+    # Determine how to compute signed error
+    # Priority 1: compute from y_pred / y_true if available
+    signed_error = None
+    if {'y_pred', 'y_true'}.issubset(covid_data.columns):
+        signed_error = covid_data['y_pred'].to_numpy() - covid_data['y_true'].to_numpy()
+    else:
+        # Priority 2: use stored residual/error and flip sign assuming resid = y_true - y_pred
+        error_col = None
+        if 'resid' in covid_data.columns:
+            error_col = 'resid'
+        elif 'error' in covid_data.columns:
+            error_col = 'error'
+        else:
+            print("  ! No error/residual column found in COVID data")
+            return
+        signed_error = -covid_data[error_col].to_numpy()
+
+    # Split by group, drop NaNs
+    low_debt_errors = signed_error[covid_data['DebtGroup'].to_numpy() == 'LowDebt']
+    high_debt_errors = signed_error[covid_data['DebtGroup'].to_numpy() == 'HighDebt']
+
+    low_debt_errors = low_debt_errors[~np.isnan(low_debt_errors)]
+    high_debt_errors = high_debt_errors[~np.isnan(high_debt_errors)]
+
+    if len(high_debt_errors) == 0 or len(low_debt_errors) == 0:
+        print("  ! Insufficient data for boxplot")
+        return
+
     # Create figure
     fig, ax = plt.subplots(figsize=(7, 5))
-    
-    # Prepare data for plotting
-    high_debt_errors = -covid_data[covid_data['DebtGroup'] == 'HighDebt']['resid'].values  # signed error = yhat - y
-    low_debt_errors = -covid_data[covid_data['DebtGroup'] == 'LowDebt']['resid'].values   # signed error = yhat - y
-    
-    # Create boxplot
+
     positions = [1, 2]
     box_data = [low_debt_errors, high_debt_errors]
     labels = ['Low Debt\nCountries', 'High Debt\nCountries']
-    
-    bp = ax.boxplot(box_data, positions=positions, widths=0.5,
-                    patch_artist=True,
-                    notch=False,
-                    showmeans=True,
-                    meanprops=dict(marker='D', markerfacecolor=JOURNAL_COLORS['accent_red'],
-                                  markeredgecolor=JOURNAL_COLORS['accent_red'],
-                                  markersize=6, zorder=3),
-                    medianprops=dict(color=JOURNAL_COLORS['dark_grey'], linewidth=2),
-                    boxprops=dict(facecolor='white', edgecolor=JOURNAL_COLORS['primary_blue'],
-                                 linewidth=1.5, alpha=0.8),
-                    whiskerprops=dict(color=JOURNAL_COLORS['primary_blue'], linewidth=1.5),
-                    capprops=dict(color=JOURNAL_COLORS['primary_blue'], linewidth=1.5),
-                    flierprops=dict(marker='o', markerfacecolor=JOURNAL_COLORS['medium_grey'],
-                                   markeredgecolor='none', markersize=4, alpha=0.5))
-    
+
+    bp = ax.boxplot(
+        box_data,
+        positions=positions,
+        widths=0.5,
+        patch_artist=True,
+        notch=False,
+        showmeans=True,
+        meanprops=dict(
+            marker='D',
+            markerfacecolor=JOURNAL_COLORS['accent_red'],
+            markeredgecolor=JOURNAL_COLORS['accent_red'],
+            markersize=6,
+            zorder=3
+        ),
+        medianprops=dict(color=JOURNAL_COLORS['dark_grey'], linewidth=2),
+        boxprops=dict(
+            facecolor='white',
+            edgecolor=JOURNAL_COLORS['primary_blue'],
+            linewidth=1.5,
+            alpha=0.8
+        ),
+        whiskerprops=dict(color=JOURNAL_COLORS['primary_blue'], linewidth=1.5),
+        capprops=dict(color=JOURNAL_COLORS['primary_blue'], linewidth=1.5),
+        flierprops=dict(
+            marker='o',
+            markerfacecolor=JOURNAL_COLORS['medium_grey'],
+            markeredgecolor='none',
+            markersize=4,
+            alpha=0.5
+        )
+    )
+
     # Color boxes differently
     bp['boxes'][0].set_facecolor(JOURNAL_COLORS['primary_blue'])
     bp['boxes'][0].set_alpha(0.3)
     bp['boxes'][1].set_facecolor(JOURNAL_COLORS['accent_red'])
     bp['boxes'][1].set_alpha(0.3)
-    
-    # Add horizontal reference line at y=0
-    ax.axhline(0, color=JOURNAL_COLORS['dark_grey'], linestyle='--', 
-               linewidth=1.2, alpha=0.6, zorder=1)
-    
-    # Calculate and display means
-    mean_low = np.mean(low_debt_errors)
-    mean_high = np.mean(high_debt_errors)
-    
-    # Add mean value annotations
-    ax.text(1, mean_low - 0.015, f'μ = {mean_low:.3f}',
-            ha='center', va='top', fontsize=FONT_CONFIG['tick_size'],
-            color=JOURNAL_COLORS['primary_blue'], fontweight='bold',
-            bbox=dict(boxstyle='round,pad=0.3', facecolor='white',
-                     edgecolor=JOURNAL_COLORS['primary_blue'], linewidth=1))
-    
-    ax.text(2, mean_high - 0.015, f'μ = {mean_high:.3f}',
-            ha='center', va='top', fontsize=FONT_CONFIG['tick_size'],
-            color=JOURNAL_COLORS['accent_red'], fontweight='bold',
-            bbox=dict(boxstyle='round,pad=0.3', facecolor='white',
-                     edgecolor=JOURNAL_COLORS['accent_red'], linewidth=1))
-    
-    # Statistical annotation (mean difference)
+
+    # Reference line at zero
+    ax.axhline(
+        0,
+        color=JOURNAL_COLORS['dark_grey'],
+        linestyle='--',
+        linewidth=1.2,
+        alpha=0.6,
+        zorder=1
+    )
+
+    # Means
+    mean_low = float(np.mean(low_debt_errors))
+    mean_high = float(np.mean(high_debt_errors))
+
+    ax.text(
+        1, mean_low - 0.015, f'μ = {mean_low:.3f}',
+        ha='center', va='top',
+        fontsize=FONT_CONFIG['tick_size'],
+        color=JOURNAL_COLORS['primary_blue'],
+        fontweight='bold',
+        bbox=dict(
+            boxstyle='round,pad=0.3',
+            facecolor='white',
+            edgecolor=JOURNAL_COLORS['primary_blue'],
+            linewidth=1
+        )
+    )
+
+    ax.text(
+        2, mean_high - 0.015, f'μ = {mean_high:.3f}',
+        ha='center', va='top',
+        fontsize=FONT_CONFIG['tick_size'],
+        color=JOURNAL_COLORS['accent_red'],
+        fontweight='bold',
+        bbox=dict(
+            boxstyle='round,pad=0.3',
+            facecolor='white',
+            edgecolor=JOURNAL_COLORS['accent_red'],
+            linewidth=1
+        )
+    )
+
+    # Mean difference annotation (robust y-position)
     diff = mean_high - mean_low
     if abs(diff) > 0.005:
-        y_pos = max(np.max(high_debt_errors), np.max(low_debt_errors)) * 0.85
-        ax.plot([1, 2], [y_pos, y_pos], color=JOURNAL_COLORS['medium_grey'],
+        y_max = float(max(np.max(high_debt_errors), np.max(low_debt_errors)))
+        y_min = float(min(np.min(high_debt_errors), np.min(low_debt_errors)))
+        y_rng = max(1e-6, y_max - y_min)
+        y_pos = y_max + 0.06 * y_rng
+
+        ax.plot([1, 2], [y_pos, y_pos],
+                color=JOURNAL_COLORS['medium_grey'],
                 linewidth=1, alpha=0.7)
-        ax.text(1.5, y_pos + 0.008, f'Δμ = {diff:+.3f}',
-                ha='center', va='bottom', fontsize=FONT_CONFIG['size'],
-                color=JOURNAL_COLORS['dark_grey'], style='italic')
-    
+        ax.text(1.5, y_pos + 0.02 * y_rng, f'Δμ = {diff:+.3f}',
+                ha='center', va='bottom',
+                fontsize=FONT_CONFIG['size'],
+                color=JOURNAL_COLORS['dark_grey'],
+                style='italic')
+
     # Labels and title
     ax.set_xticks(positions)
     ax.set_xticklabels(labels, fontsize=FONT_CONFIG['label_size'])
-    ax.set_ylabel('Signed Forecast Error', fontweight='bold', 
+    ax.set_ylabel('Signed Forecast Error', fontweight='bold',
                   fontsize=FONT_CONFIG['label_size'])
     ax.set_title('Signed Forecast Errors during COVID-19\n(2020–2021)',
-                 fontsize=FONT_CONFIG['title_size'], fontweight='bold', pad=15)
-    
+                 fontsize=FONT_CONFIG['title_size'],
+                 fontweight='bold',
+                 pad=15)
+
     # Grid
     ax.yaxis.grid(True, linestyle='-', linewidth=0.5,
-                  color=JOURNAL_COLORS['light_grey'], alpha=VISUAL_CONFIG['grid_alpha'])
+                  color=JOURNAL_COLORS['light_grey'],
+                  alpha=VISUAL_CONFIG['grid_alpha'])
     ax.set_axisbelow(True)
-    
+
     # Legend
     from matplotlib.patches import Patch
     legend_elements = [
@@ -1237,201 +1322,157 @@ def create_signed_error_boxplot_journal(results_df, output_path):
     ]
     ax.legend(handles=legend_elements, loc='upper left',
               frameon=False, fontsize=FONT_CONFIG['tick_size'])
-    
-    # Add sample sizes
-    n_low = len(low_debt_errors)
-    n_high = len(high_debt_errors)
-    fig.text(0.12, 0.02,
-             f'Note: Low Debt n={n_low}, High Debt n={n_high}. ' +
-             'Positive errors indicate under-prediction (Actual > Forecast). ' +
-             'Debt classification based on 2019 government debt-to-GDP ratio.',
-             fontsize=8, style='italic', color=JOURNAL_COLORS['medium_grey'],
-             wrap=True)
-    
+
+    # Footnote
+    n_low = int(len(low_debt_errors))
+    n_high = int(len(high_debt_errors))
+    fig.text(
+        0.12, 0.02,
+        f'Note: Low Debt n={n_low}, High Debt n={n_high}. '
+        'Positive errors indicate over-prediction (Forecast > Actual). '
+        'Debt classification based on 2019 government debt-to-GDP ratio.',
+        fontsize=8, style='italic', color=JOURNAL_COLORS['medium_grey'], wrap=True
+    )
+
     plt.tight_layout(rect=[0, 0.06, 1, 1])
     plt.savefig(output_path, dpi=VISUAL_CONFIG['dpi'], bbox_inches='tight')
     plt.close(fig)
     print(f"  ✓ Saved: {output_path.name}")
-
 def create_debt_threshold_sensitivity_journal(results_df, outpath):
+    """Sensitivity analysis: RMSE gap across different debt thresholds during COVID (2020–2021)."""
+    set_journal_style()
+
     df = results_df.copy()
-    if df.empty:
+    if df is None or df.empty:
+        print("  ! No data for debt threshold sensitivity analysis")
         return
 
-    # focus on Covid window
-    df = df[(df["year"] >= 2020) & (df["year"] <= 2021)].copy()
-    if df.empty:
+    # ---- Helper: find column by exact or case-insensitive match ----
+    def _find_col(frame, names):
+        cols = list(frame.columns)
+        lower_map = {c.lower(): c for c in cols}
+        for n in names:
+            if n in cols:
+                return n
+            if isinstance(n, str) and n.lower() in lower_map:
+                return lower_map[n.lower()]
+        return None
+
+    year_col = _find_col(df, ["year", "Year", "YEAR"])
+    if year_col is None:
+        print("  ! Cannot run sensitivity analysis: missing year column")
         return
 
-    # squared error for RMSE
-    df["sq_error"] = (df["error"].astype(float)) ** 2
+    # Focus on Covid window
+    df = df.copy()
+    df[year_col] = pd.to_numeric(df[year_col], errors="coerce")
+    df = df[(df[year_col] >= 2020) & (df[year_col] <= 2021)].copy()
+    if df.empty:
+        print("  ! No COVID data for debt threshold sensitivity")
+        return
 
+    # ---- Compute squared error (robust) ----
+    if "sq_error" not in df.columns:
+        resid_col = _find_col(df, ["resid", "residual", "error", "err"])
+        y_true_col = _find_col(df, ["y_true", "y", "actual"])
+        y_pred_col = _find_col(df, ["y_pred", "yhat", "pred", "forecast"])
+        if resid_col is not None:
+            df["sq_error"] = pd.to_numeric(df[resid_col], errors="coerce") ** 2
+        elif (y_true_col is not None) and (y_pred_col is not None):
+            yt = pd.to_numeric(df[y_true_col], errors="coerce")
+            yp = pd.to_numeric(df[y_pred_col], errors="coerce")
+            df["sq_error"] = (yt - yp) ** 2
+        else:
+            print("  ! Cannot compute squared error (need resid/error OR y_true & y_pred)")
+            return
+    else:
+        df["sq_error"] = pd.to_numeric(df["sq_error"], errors="coerce")
+
+    # ---- Debt-group columns (support multiple naming conventions) ----
     checks = [
-        ("Median (2019)", "debt_group_median"),
-        ("Maastricht (60%)", "debt_group_60"),
-        ("High debt (90%)", "debt_group_90"),
+        ("Median (2019)", ["DebtGroup_Median", "debt_group_median", "DebtGroup_median"]),
+        ("Maastricht (60%)", ["DebtGroup_60", "debt_group_60", "DebtGroup60", "debt60"]),
+        ("High debt (90%)", ["DebtGroup_90", "debt_group_90", "DebtGroup90", "debt90"]),
     ]
 
     rows = []
-    for label, col in checks:
-        if col not in df.columns:
+    for label, candidates in checks:
+        col = _find_col(df, candidates)
+        if col is None:
             continue
+
         sub = df[df[col].isin(["HighDebt", "LowDebt"])].copy()
         if sub.empty:
             continue
+
         rmse = sub.groupby(col)["sq_error"].mean().pow(0.5)
         rmse_high = float(rmse.get("HighDebt", np.nan))
         rmse_low = float(rmse.get("LowDebt", np.nan))
+        if not (np.isfinite(rmse_high) and np.isfinite(rmse_low)):
+            continue
+
         gap = rmse_high - rmse_low
         rows.append((label, rmse_low, rmse_high, gap))
 
     if not rows:
+        print("  ! No valid debt group data for sensitivity analysis (check DebtGroup_* columns)")
         return
 
     sens = pd.DataFrame(rows, columns=["Threshold", "RMSE_LowDebt", "RMSE_HighDebt", "Gap"])
 
     fig, ax = plt.subplots(figsize=(8.2, 4.6))
-    ax.bar(sens["Threshold"], sens["Gap"], alpha=0.85)
-    ax.axhline(0, linewidth=1)
-    ax.set_ylabel("RMSE gap (High debt − Low debt)")
-    ax.set_title("Sensitivity of the Covid RMSE Gap to Debt Thresholds (2020–2021)")
-    ax.tick_params(axis='x', rotation=0)
 
+    colors = [
+        JOURNAL_COLORS["primary_blue"] if g >= 0 else JOURNAL_COLORS["accent_red"]
+        for g in sens["Gap"].values
+    ]
+
+    ax.bar(
+        sens["Threshold"],
+        sens["Gap"],
+        alpha=VISUAL_CONFIG.get("bar_alpha", 0.85),
+        color=colors,
+        edgecolor="white",
+        linewidth=0.8,
+    )
+
+    ax.axhline(0, color=JOURNAL_COLORS["dark_grey"], linewidth=1.2, linestyle="--", alpha=0.6)
+    ax.set_ylabel("RMSE Gap (High Debt − Low Debt)", fontweight="bold", fontsize=FONT_CONFIG["label_size"])
+    ax.set_xlabel("Debt Threshold Definition", fontweight="bold", fontsize=FONT_CONFIG["label_size"])
+    ax.set_title(
+    "Sensitivity Analysis: COVID-19 RMSE Gap Across Debt Thresholds\n(2020–2021)",
+    fontsize=FONT_CONFIG["title_size"],
+    fontweight="bold",
+)
+    ax.tick_params(axis="x", rotation=0)
+
+    # value labels
     for i, v in enumerate(sens["Gap"].values):
         if np.isfinite(v):
-            ax.text(i, v + (0.002 if v >= 0 else -0.002), f"{v:+.3f}",
-                    ha="center", va="bottom" if v >= 0 else "top", fontsize=10)
+            ax.text(
+                i,
+                v + (0.002 if v >= 0 else -0.002),
+                f"{v:+.3f}",
+                ha="center",
+                va="bottom" if v >= 0 else "top",
+                fontsize=FONT_CONFIG["size"],
+                fontweight="bold",
+                color=JOURNAL_COLORS["dark_grey"],
+            )
+
+    ax.yaxis.grid(
+        True,
+        linestyle="-",
+        linewidth=0.5,
+        color=JOURNAL_COLORS["light_grey"],
+        alpha=VISUAL_CONFIG.get("grid_alpha", 0.25),
+    )
+    ax.set_axisbelow(True)
 
     fig.tight_layout()
-    fig.savefig(outpath, dpi=300, bbox_inches="tight")
+    fig.savefig(outpath, dpi=VISUAL_CONFIG["dpi"], bbox_inches="tight")
     plt.close(fig)
-
-def create_signed_error_boxplot_journal(results_df, output_path):
-    """
-    Journal-standard boxplot showing signed forecast errors during COVID-19.
-    Compares High Debt vs Low Debt countries (2020-2021).
-    """
-    set_journal_style()
-    
-    # Filter COVID period data
-    covid_data = results_df[results_df['segment'] == 'covid'].copy()
-    
-    # Remove unknown debt groups
-    covid_data = covid_data[covid_data['DebtGroup'].isin(['HighDebt', 'LowDebt'])]
-    
-    if len(covid_data) == 0:
-        print("  ! No COVID data available for signed error plot")
-        return
-    
-    # Create figure
-    fig, ax = plt.subplots(figsize=(7, 5))
-    
-    # Prepare data for plotting
-    high_debt_errors = -covid_data[covid_data['DebtGroup'] == 'HighDebt']['resid'].values  # signed error = yhat - y
-    low_debt_errors = -covid_data[covid_data['DebtGroup'] == 'LowDebt']['resid'].values   # signed error = yhat - y
-    
-    # Create boxplot
-    positions = [1, 2]
-    box_data = [low_debt_errors, high_debt_errors]
-    labels = ['Low Debt\nCountries', 'High Debt\nCountries']
-    
-    bp = ax.boxplot(box_data, positions=positions, widths=0.5,
-                    patch_artist=True,
-                    notch=False,
-                    showmeans=True,
-                    meanprops=dict(marker='D', markerfacecolor=JOURNAL_COLORS['accent_red'],
-                                  markeredgecolor=JOURNAL_COLORS['accent_red'],
-                                  markersize=6, zorder=3),
-                    medianprops=dict(color=JOURNAL_COLORS['dark_grey'], linewidth=2),
-                    boxprops=dict(facecolor='white', edgecolor=JOURNAL_COLORS['primary_blue'],
-                                 linewidth=1.5, alpha=0.8),
-                    whiskerprops=dict(color=JOURNAL_COLORS['primary_blue'], linewidth=1.5),
-                    capprops=dict(color=JOURNAL_COLORS['primary_blue'], linewidth=1.5),
-                    flierprops=dict(marker='o', markerfacecolor=JOURNAL_COLORS['medium_grey'],
-                                   markeredgecolor='none', markersize=4, alpha=0.5))
-    
-    # Color boxes differently
-    bp['boxes'][0].set_facecolor(JOURNAL_COLORS['primary_blue'])
-    bp['boxes'][0].set_alpha(0.3)
-    bp['boxes'][1].set_facecolor(JOURNAL_COLORS['accent_red'])
-    bp['boxes'][1].set_alpha(0.3)
-    
-    # Add horizontal reference line at y=0
-    ax.axhline(0, color=JOURNAL_COLORS['dark_grey'], linestyle='--', 
-               linewidth=1.2, alpha=0.6, zorder=1)
-    
-    # Calculate and display means
-    mean_low = np.mean(low_debt_errors)
-    mean_high = np.mean(high_debt_errors)
-    
-    # Add mean value annotations
-    ax.text(1, mean_low - 0.015, f'μ = {mean_low:.3f}',
-            ha='center', va='top', fontsize=FONT_CONFIG['tick_size'],
-            color=JOURNAL_COLORS['primary_blue'], fontweight='bold',
-            bbox=dict(boxstyle='round,pad=0.3', facecolor='white',
-                     edgecolor=JOURNAL_COLORS['primary_blue'], linewidth=1))
-    
-    ax.text(2, mean_high - 0.015, f'μ = {mean_high:.3f}',
-            ha='center', va='top', fontsize=FONT_CONFIG['tick_size'],
-            color=JOURNAL_COLORS['accent_red'], fontweight='bold',
-            bbox=dict(boxstyle='round,pad=0.3', facecolor='white',
-                     edgecolor=JOURNAL_COLORS['accent_red'], linewidth=1))
-    
-    # Statistical annotation (mean difference)
-    diff = mean_high - mean_low
-    if abs(diff) > 0.005:
-        y_pos = max(np.max(high_debt_errors), np.max(low_debt_errors)) * 0.85
-        ax.plot([1, 2], [y_pos, y_pos], color=JOURNAL_COLORS['medium_grey'],
-                linewidth=1, alpha=0.7)
-        ax.text(1.5, y_pos + 0.008, f'Δμ = {diff:+.3f}',
-                ha='center', va='bottom', fontsize=FONT_CONFIG['size'],
-                color=JOURNAL_COLORS['dark_grey'], style='italic')
-    
-    # Labels and title
-    ax.set_xticks(positions)
-    ax.set_xticklabels(labels, fontsize=FONT_CONFIG['label_size'])
-    ax.set_ylabel('Signed Forecast Error', fontweight='bold', 
-                  fontsize=FONT_CONFIG['label_size'])
-    ax.set_title('Signed Forecast Errors during COVID-19\n(2020–2021)',
-                 fontsize=FONT_CONFIG['title_size'], fontweight='bold', pad=15)
-    
-    # Grid
-    ax.yaxis.grid(True, linestyle='-', linewidth=0.5,
-                  color=JOURNAL_COLORS['light_grey'], alpha=VISUAL_CONFIG['grid_alpha'])
-    ax.set_axisbelow(True)
-    
-    # Legend
-    from matplotlib.patches import Patch
-    legend_elements = [
-        Patch(facecolor=JOURNAL_COLORS['primary_blue'], alpha=0.3,
-              edgecolor=JOURNAL_COLORS['primary_blue'], linewidth=1.5,
-              label='Low Debt (≤60% GDP)'),
-        Patch(facecolor=JOURNAL_COLORS['accent_red'], alpha=0.3,
-              edgecolor=JOURNAL_COLORS['accent_red'], linewidth=1.5,
-              label='High Debt (>60% GDP)'),
-        plt.Line2D([0], [0], marker='D', color='w',
-                   markerfacecolor=JOURNAL_COLORS['accent_red'],
-                   markersize=6, label='Mean'),
-        plt.Line2D([0], [0], color=JOURNAL_COLORS['dark_grey'],
-                   linewidth=2, label='Median')
-    ]
-    ax.legend(handles=legend_elements, loc='upper left',
-              frameon=False, fontsize=FONT_CONFIG['tick_size'])
-    
-    # Add sample sizes
-    n_low = len(low_debt_errors)
-    n_high = len(high_debt_errors)
-    fig.text(0.12, 0.02,
-             f'Note: Low Debt n={n_low}, High Debt n={n_high}. ' +
-             'Positive errors indicate under-prediction (Actual > Forecast). ' +
-             'Debt classification based on 2019 government debt-to-GDP ratio.',
-             fontsize=8, style='italic', color=JOURNAL_COLORS['medium_grey'],
-             wrap=True)
-    
-    plt.tight_layout(rect=[0, 0.06, 1, 1])
-    plt.savefig(output_path, dpi=VISUAL_CONFIG['dpi'], bbox_inches='tight')
-    plt.close(fig)
-    print(f"  ✓ Saved: {output_path.name}")
+    print(f"  ✓ Saved: {Path(outpath).name}")
 
 
 def create_professional_charts(results_df, overall, segment_perf, rmse_seg, rmse_debt, best_idx, output_dir):
@@ -1444,7 +1485,6 @@ def create_professional_charts(results_df, overall, segment_perf, rmse_seg, rmse
     # ========== Figure 1: Leaderboard (Pre-COVID) ==========
     print_subsection("6.1 Leaderboard (Pre-COVID RMSE, 2016–2019)")
     leader = rmse_seg.reset_index().copy()
-    # Focus on the lagged-forecast task (inertia-based baseline)
     if "task" in leader.columns:
         leader = leader[leader["task"] == "lagged_forecast"].copy()
     leader["rmse"] = leader["pre"]
@@ -1452,8 +1492,6 @@ def create_professional_charts(results_df, overall, segment_perf, rmse_seg, rmse
     top["model_short"] = top["model"].apply(beautify_model_name)
     top["spec_short"] = top["specification"].apply(beautify_spec_name)
     top["label"] = top.apply(lambda r: f"{r['model_short']} | {r['spec_short']}", axis=1)
-
-    # Create Figure 1: Leaderboard chart
     create_leaderboard_journal(top, output_dir / "fig1_leaderboard_eurostat.png",
                                title_suffix="Out-of-Sample RMSE (2016–2019)")
 
@@ -1463,11 +1501,9 @@ def create_professional_charts(results_df, overall, segment_perf, rmse_seg, rmse
     df_best = results_df[(results_df['task'] == best_task) &
                          (results_df['specification'] == best_spec) &
                          (results_df['model'] == best_model)].copy()
-
     yearly = df_best.groupby('year')['sq_error'].mean().reset_index()
     yearly['rmse'] = np.sqrt(yearly['sq_error'])
     yearly = yearly[['year', 'rmse']].sort_values('year')
-
     create_temporal_evolution_journal(yearly, CONFIG.get('segments', {}),
                                       output_dir / "fig2_temporal_eurostat.png")
 
@@ -1485,22 +1521,53 @@ def create_professional_charts(results_df, overall, segment_perf, rmse_seg, rmse
     top_n = 6
     top_combos = overall.reset_index().sort_values('rmse').head(top_n)[['task', 'specification', 'model']]
 
-    covid_only = results_df[results_df['segment'] == 'covid'].copy()
-    rows = []
-    for _, r in top_combos.iterrows():
-        sub = covid_only[(covid_only['task'] == r['task']) &
-                         (covid_only['specification'] == r['specification']) &
-                         (covid_only['model'] == r['model'])]
-        bydg = sub.groupby('DebtGroup')['sq_error'].mean()
-        rmse_h = float(np.sqrt(bydg.get('HighDebt', np.nan)))
-        rmse_l = float(np.sqrt(bydg.get('LowDebt', np.nan)))
-        rows.append({
-            'label': f"{beautify_model_name(r['model'])}\n{beautify_spec_name(r['specification'])}",
-            'HighDebt_RMSE': rmse_h,
-            'LowDebt_RMSE': rmse_l,
-        })
+    covid_only = results_df.copy()
+    if 'segment' in covid_only.columns:
+        covid_only = covid_only[covid_only['segment'] == 'covid'].copy()
+    elif 'year' in covid_only.columns:
+        covid_only = covid_only[(covid_only['year'] >= 2020) & (covid_only['year'] <= 2021)].copy()
+    elif 'Year' in covid_only.columns:
+        covid_only = covid_only[(covid_only['Year'] >= 2020) & (covid_only['Year'] <= 2021)].copy()
 
-    debt_df = pd.DataFrame(rows)
+    if covid_only.empty:
+        print("  ! Skipped Figure 4 (no COVID observations found)")
+        debt_df = pd.DataFrame(columns=['label', 'HighDebt_RMSE', 'LowDebt_RMSE'])
+    else:
+        if 'sq_error' not in covid_only.columns:
+            if 'resid' in covid_only.columns:
+                covid_only['sq_error'] = pd.to_numeric(covid_only['resid'], errors='coerce') ** 2
+            elif 'error' in covid_only.columns:
+                covid_only['sq_error'] = pd.to_numeric(covid_only['error'], errors='coerce') ** 2
+            elif ('y_true' in covid_only.columns) and ('y_pred' in covid_only.columns):
+                yt = pd.to_numeric(covid_only['y_true'], errors='coerce')
+                yp = pd.to_numeric(covid_only['y_pred'], errors='coerce')
+                covid_only['sq_error'] = (yt - yp) ** 2
+
+        rows = []
+        for _, r in top_combos.iterrows():
+            sub = covid_only[(covid_only['task'] == r['task']) &
+                             (covid_only['specification'] == r['specification']) &
+                             (covid_only['model'] == r['model'])].copy()
+
+            if sub.empty or ('DebtGroup' not in sub.columns) or ('sq_error' not in sub.columns):
+                continue
+
+            sub = sub[sub['DebtGroup'].isin(['HighDebt', 'LowDebt'])].copy()
+            if sub.empty:
+                continue
+
+            bydg = sub.groupby('DebtGroup')['sq_error'].mean()
+            rmse_h = float(np.sqrt(bydg.get('HighDebt', np.nan)))
+            rmse_l = float(np.sqrt(bydg.get('LowDebt', np.nan)))
+
+            rows.append({
+                'label': f"{beautify_model_name(r['model'])}\n{beautify_spec_name(r['specification'])}",
+                'HighDebt_RMSE': rmse_h,
+                'LowDebt_RMSE': rmse_l,
+            })
+
+        debt_df = pd.DataFrame(rows)
+
     create_debt_comparison_journal(debt_df, output_dir / "fig4_debt_eurostat.png")
 
     # ========== Figure 5: Heatmap across periods ==========
@@ -1515,7 +1582,12 @@ def create_professional_charts(results_df, overall, segment_perf, rmse_seg, rmse
     except Exception as e:
         print(f"  ! Skipped Figure 5 (heatmap) due to missing data: {e}")
 
+    # ========== Figure 6: Signed Error Boxplot (COVID) ==========
+    print_subsection("6.6 Signed Error Distribution (COVID)")
+    create_signed_error_boxplot_journal(results_df, output_dir / "fig6_signed_error_covid_boxplot.png")
+
     print(f"\n  ✓ Saved journal-style figures to {output_dir}")
+    # ==================== SECTION 7: FINAL MODEL & SHAP ====================
 def train_final_model_with_shap(df, best_spec, output_dir):
     """Train final XGBoost model and compute SHAP values."""
     print_section_header("FINAL MODEL TRAINING & INTERPRETATION", 7)
@@ -1539,6 +1611,7 @@ def train_final_model_with_shap(df, best_spec, output_dir):
         random_state=CONFIG['random_state']
     )
     xgb_final.fit(X, y)
+    
     print_subsection("7.2 Feature Importance Analysis")
 
     importance_df = pd.DataFrame({
@@ -1640,14 +1713,6 @@ def train_final_model_with_shap(df, best_spec, output_dir):
     shap_df.to_csv(output_dir / 'shap_importance.csv', index=False)
 
     return xgb_final, X, y, shap_values
-    # ========== Figure 6: Signed Error Boxplot (COVID) ==========
-    print_subsection("6.6 Signed Error Distribution (COVID)")
-    # Signed error convention for the paper: e = y_hat - y (positive = over-prediction)
-    # Our stored residual is usually y - y_hat, so we flip the sign inside the plotting function.
-    create_signed_error_boxplot_journal(results_df, output_dir / "fig6_signed_error_covid_boxplot.png")
-
-    print_subsection("6.7 Sensitivity: Debt Thresholds (COVID)")
-
 # ==================== SECTION 8: RESIDUAL DIAGNOSTICS ====================
 def residual_diagnostics(model, X, y, output_dir):
     """Residual diagnostics for the final model."""
