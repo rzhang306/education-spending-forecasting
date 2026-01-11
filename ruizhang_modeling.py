@@ -1,4 +1,34 @@
 """
+=============================================================================
+EU EDUCATION EXPENDITURE MODELING — ONE-CLICK SCRIPT
+=============================================================================
+How to run (teacher/TA):
+  1) Put this .py file and ready_for_ml_panel.csv in the SAME folder
+     (or put the csv in a subfolder named "data/").
+  2) Run in Terminal:
+       python3 ruizhang_modeling.py
+Outputs:
+  - All figures/tables saved into: report_results/
+Notes:
+  - This script is designed to be reproducible and non-interactive (it saves figures).
+    If you want pop-up windows, set SHOW_FIGURES = True below.
+=============================================================================
+"""
+
+# -------------------- One-click working-directory fix --------------------
+from pathlib import Path as _Path
+import os as _os
+_SCRIPT_DIR = _Path(__file__).resolve().parent
+try:
+    _os.chdir(_SCRIPT_DIR)  # ensures relative paths work when launched from anywhere
+except Exception:
+    pass
+
+# -------------------- Optional: show figures interactively ----------------
+SHOW_FIGURES = False  # set True to display figures (may slow down and require closing windows)
+
+
+"""
 EU Education Expenditure Modeling - Professional Analysis Pipeline
 
 Author: [Your Name]
@@ -7,17 +37,6 @@ Purpose: Master's Thesis / Term Paper Analysis
 
 Run: python modeling_professional.py
 """
-
-# Ensure relative paths work no matter where the user runs the script from
-import os as __os
-import pathlib as __pathlib
-__SCRIPT_DIR = __pathlib.Path(__file__).resolve().parent
-try:
-    __os.chdir(__SCRIPT_DIR)
-except Exception:
-    pass
-
-
 
 import os
 import json
@@ -52,28 +71,6 @@ def _find_data_file(filename: str) -> Path:
 
 import numpy as np
 import pandas as pd
-
-# =========================
-# TEACHER-FRIENDLY DISPLAY OPTIONS
-# =========================
-# By default, the script SAVES all figures to the output folder.
-# If you want pop-up windows for each figure, set environment variable:
-#   SHOW_FIGURES=1
-# Example (macOS/Linux):
-#   SHOW_FIGURES=1 /usr/local/bin/python3 ruizhang_modeling_teacher_run_v2.py
-import os as _os
-SHOW_FIGURES = str(_os.getenv("SHOW_FIGURES", "0")).strip() in ("1","true","True","yes","Y")
-
-def safe_close(fig=None):
-    """Close figures only when we are NOT displaying them."""
-    import matplotlib.pyplot as _plt
-    if SHOW_FIGURES:
-        return
-    try:
-        _plt.close(fig)
-    except Exception:
-        pass
-
 import matplotlib
 if not SHOW_FIGURES:
     matplotlib.use('Agg')
@@ -898,7 +895,7 @@ def create_leaderboard_journal(data, output_path, title_suffix="Out-of-Sample RM
     
     plt.tight_layout()
     plt.savefig(output_path, dpi=VISUAL_CONFIG['dpi'], bbox_inches='tight')
-    safe_close(fig)
+    plt.close(fig)
     print(f"  ✓ Saved: {output_path.name}")
 
 
@@ -941,7 +938,7 @@ def create_temporal_evolution_journal(yearly_data, segments, output_path):
     
     plt.tight_layout()
     plt.savefig(output_path, dpi=VISUAL_CONFIG['dpi'], bbox_inches='tight')
-    safe_close(fig)
+    plt.close(fig)
     print(f"  ✓ Saved: {output_path.name}")
 
 
@@ -992,7 +989,7 @@ def create_period_comparison_journal(data, output_path):
     
     plt.tight_layout()
     plt.savefig(output_path, dpi=VISUAL_CONFIG['dpi'], bbox_inches='tight')
-    safe_close(fig)
+    plt.close(fig)
     print(f"  ✓ Saved: {output_path.name}")
 
 
@@ -1069,7 +1066,7 @@ def create_debt_comparison_journal(data, output_path):
     
     plt.tight_layout()
     plt.savefig(output_path, dpi=VISUAL_CONFIG['dpi'], bbox_inches='tight')
-    safe_close(fig)
+    plt.close(fig)
     print(f"  ✓ Saved: {output_path.name}")
 
 
@@ -1124,7 +1121,7 @@ def create_heatmap_journal(data, output_path):
     
     plt.tight_layout()
     plt.savefig(output_path, dpi=VISUAL_CONFIG['dpi'], bbox_inches='tight')
-    safe_close(fig)
+    plt.close(fig)
     print(f"  ✓ Saved: {output_path.name}")
 
 
@@ -1253,7 +1250,7 @@ def create_signed_error_boxplot_journal(results_df, output_path):
     
     plt.tight_layout(rect=[0, 0.06, 1, 1])
     plt.savefig(output_path, dpi=VISUAL_CONFIG['dpi'], bbox_inches='tight')
-    safe_close(fig)
+    plt.close(fig)
     print(f"  ✓ Saved: {output_path.name}")
 
 def create_debt_threshold_sensitivity_journal(results_df, outpath):
@@ -1307,7 +1304,7 @@ def create_debt_threshold_sensitivity_journal(results_df, outpath):
 
     fig.tight_layout()
     fig.savefig(outpath, dpi=300, bbox_inches="tight")
-    safe_close(fig)
+    plt.close(fig)
 
 def create_signed_error_boxplot_journal(results_df, output_path):
     """
@@ -1433,7 +1430,7 @@ def create_signed_error_boxplot_journal(results_df, output_path):
     
     plt.tight_layout(rect=[0, 0.06, 1, 1])
     plt.savefig(output_path, dpi=VISUAL_CONFIG['dpi'], bbox_inches='tight')
-    safe_close(fig)
+    plt.close(fig)
     print(f"  ✓ Saved: {output_path.name}")
 
 
@@ -1636,7 +1633,7 @@ def train_final_model_with_shap(df, best_spec, output_dir):
     plt.tight_layout()
     plt.savefig(output_dir / 'feature_importance_comparison.png',
                 dpi=300, bbox_inches='tight', facecolor='white')
-    safe_close()
+    plt.close()
     print("  ✓ Saved: feature_importance_comparison.png")
 
     importance_df.to_csv(output_dir / 'feature_importance.csv', index=False)
@@ -1739,7 +1736,7 @@ def residual_diagnostics(model, X, y, output_dir):
 
     plt.savefig(output_dir / 'residual_diagnostics.png',
                 dpi=300, bbox_inches='tight', facecolor='white')
-    safe_close()
+    plt.close()
     print("  ✓ Saved: residual_diagnostics.png")
 
 # ==================== SECTION 9: EXECUTIVE SUMMARY ====================
@@ -1888,82 +1885,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-# ==================== OVERRIDES: PUBLICATION-READY COLORS & TRANSPARENCY ====================
-
-    if SHOW_FIGURES:
-        import matplotlib.pyplot as plt
-        plt.show()
-import matplotlib.pyplot as plt
-import seaborn as sns
-
-# Academic, print-friendly colors
-COLOR_BLUE = '#2F5597'   # deep academic blue
-COLOR_RED  = '#9C2A2A'   # muted brick red
-ALPHA_BAR  = 0.85
-
-# Global style tweaks
-plt.rcParams.update({
-    'font.family': 'serif',
-    'font.serif': ['Times New Roman'],
-    'font.size': 12,
-    'axes.spines.top': False,
-    'axes.spines.right': False,
-    'legend.frameon': False,
-})
-
-def create_period_comparison_journal(data, output_path):
-    print('[VISUAL OVERRIDE] Figure 3 function called ->', output_path)
-    periods = ['Pre-COVID', 'COVID', 'Post-COVID']
-    values = [data['pre'], data['covid'], data['post']]
-
-    fig, ax = plt.subplots(figsize=(8, 5))
-    bars = ax.bar(
-        periods, values,
-        color=[COLOR_BLUE, COLOR_RED, COLOR_BLUE],
-        width=0.6, alpha=ALPHA_BAR
-    )
-
-    for bar, val in zip(bars, values):
-        ax.text(bar.get_x() + bar.get_width()/2, val + 0.003,
-                f'{val:.3f}', ha='center', va='bottom')
-
-    pct_change = (data['covid'] - data['pre']) / data['pre'] * 100
-    ax.annotate(f'+{pct_change:.1f}%',
-                xy=(1, data['covid']),
-                xytext=(1, data['covid'] + 0.015),
-                ha='center', fontsize=12, fontweight='bold',
-                color=COLOR_RED,
-                arrowprops=dict(arrowstyle='->', color=COLOR_RED, linewidth=1.2))
-
-    ax.set_ylabel('RMSE')
-    ax.set_title('Forecast Performance by Period\nBaseline Specification [VISUAL]')
-    ax.set_xlabel('')
-    ax.yaxis.grid(True, linestyle='-', alpha=0.3)
-    ax.set_axisbelow(True)
-
-    plt.tight_layout()
-    plt.savefig(output_path, bbox_inches='tight')
-    safe_close()
-
-def create_debt_comparison_journal(df, output_path):
-    print('[VISUAL OVERRIDE] Figure 5 function called ->', output_path)
-    fig, ax = plt.subplots(figsize=(8, 6))
-    palette = {'High Debt': COLOR_RED, 'Low Debt': COLOR_BLUE}
-
-    sns.barplot(
-        data=df, x='RMSE', y='Model', hue='DebtGroup',
-        palette=palette, orient='h', ax=ax, alpha=ALPHA_BAR
-    )
-
-    ax.set_title('Fiscal Constraint Impact on Forecast Accuracy\nCOVID-19 Period (2020–2021) [VISUAL]')
-    ax.set_xlabel('RMSE (COVID Period)')
-    ax.set_ylabel('')
-    ax.legend(title='', loc='lower right')
-    ax.xaxis.grid(True, linestyle='-', alpha=0.3)
-    ax.set_axisbelow(True)
-
-    plt.tight_layout()
-    plt.savefig(output_path, bbox_inches='tight')
-    safe_close()
